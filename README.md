@@ -1,121 +1,112 @@
-# 💄 Sistema de Gerenciamento – Salão de Beleza
+# 💄 Sistema de Gestão de Clínica Estética
 
-Sistema desktop completo desenvolvido com **Python 3 + Tkinter + PostgreSQL**.
+Trabalho da disciplina **Banco de Dados II** — PostgreSQL.
+
+Sistema web com **CRUD** completo: backend em **Python + FastAPI** e frontend em
+**HTML / CSS / JavaScript** (sem frameworks).
 
 ---
 
-## 📁 Estrutura do Projeto
+## 📁 Estrutura
 
 ```
-salao/
-├── main.py                  ← Ponto de entrada / janela principal
+.
+├── tabelas.sql          ← Tabelas + INSERTs (esquema oficial)
+├── objetos.sql          ← 3 views, 1 trigger, 3 functions/procedures, índices
+├── extras.sql           ← (opcional) CHECKs de integridade no banco
 ├── requirements.txt
-├── database/
-│   ├── connection.py        ← Conexão e utilitários do banco
-│   └── schema.sql           ← Tabelas e triggers PostgreSQL
-├── modules/
-│   ├── dashboard.py         ← Tela inicial com cards e resumos
-│   ├── clientes.py
-│   ├── funcionarios.py
-│   ├── produtos.py
-│   ├── servicos.py
-│   ├── agendamentos.py      ← Com seleção múltipla de serviços (N:N)
-│   ├── vendas.py            ← Com controle automático de estoque
-│   └── pagamentos.py
-└── utils/
-    ├── constants.py         ← Paleta de cores, fontes, constantes
-    └── widgets.py           ← Componentes reutilizáveis (botões, tabelas, etc.)
+├── backend/
+│   ├── .env.example     ← modelo de credenciais (copie para .env)
+│   └── app/
+│       ├── main.py          ← app FastAPI + tratamento de erros + serve o frontend
+│       ├── database.py      ← conexão PostgreSQL (psycopg2)
+│       ├── schemas.py       ← validações de entrada (Pydantic)
+│       ├── helpers.py
+│       └── routers/         ← uma rota por entidade + dashboard
+└── frontend/
+    ├── index.html
+    ├── css/styles.css
+    └── js/  (api.js, components.js, entities.js, app.js)
 ```
 
 ---
 
 ## ⚙️ Pré-requisitos
-
 - Python 3.9+
 - PostgreSQL 12+
-- pip
 
----
+## 🚀 Como rodar
 
-## 🚀 Instalação e Execução
+### 1) Banco de dados
+Crie o banco e execute os scripts **nesta ordem**:
 
-### 1. Instalar dependências Python
+```sql
+CREATE DATABASE "salaoBeleza";
+```
+```bash
+psql -U postgres -d salaoBeleza -f tabelas.sql
+psql -U postgres -d salaoBeleza -f objetos.sql
+psql -U postgres -d salaoBeleza -f extras.sql   # opcional
+```
+
+### 2) Credenciais
+Copie `backend/.env.example` para `backend/.env` e ajuste:
+
+```
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=salaoBeleza
+DB_USER=postgres
+DB_PASSWORD=sua_senha
+```
+
+### 3) Dependências e execução
 
 ```bash
 pip install -r requirements.txt
+cd backend
+uvicorn app.main:app --reload
 ```
 
-### 2. Criar o banco de dados no PostgreSQL
-
-```sql
-CREATE DATABASE salao_beleza;
-```
-
-### 3. Configurar credenciais
-
-Edite o arquivo `database/connection.py`:
-
-```python
-DB_CONFIG = {
-    "host":     "localhost",
-    "port":     5432,
-    "database": "salao_beleza",
-    "user":     "postgres",
-    "password": "SUA_SENHA_AQUI",
-}
-```
-
-Ou use variáveis de ambiente:
-
-```bash
-export DB_HOST=localhost
-export DB_PORT=5432
-export DB_NAME=salao_beleza
-export DB_USER=postgres
-export DB_PASSWORD=SUA_SENHA
-```
-
-### 4. Executar o sistema
-
-```bash
-cd salao
-python main.py
-```
-
-O sistema criará automaticamente todas as tabelas e triggers na primeira execução.
+Acesse:
+- **Aplicação:** http://localhost:8000
+- **API (docs Swagger):** http://localhost:8000/docs
 
 ---
 
-## 🗂️ Módulos
+## 🧱 Objetos do banco (Etapa 1) e justificativas
 
-| Módulo         | Funcionalidades                                           |
-|----------------|-----------------------------------------------------------|
-| Dashboard      | Cards com totais, alertas de estoque, agendamentos hoje  |
-| Clientes       | CRUD completo com busca por nome/CPF                     |
-| Funcionários   | CRUD com controle de status (Ativo/Inativo)              |
-| Produtos       | CRUD + alertas de estoque mínimo em destaque             |
-| Serviços       | CRUD com preço e tempo estimado                          |
-| Agendamentos   | CRUD com seleção múltipla de serviços (N:N)              |
-| Vendas         | Registro com atualização automática de estoque (trigger) |
-| Pagamentos     | Registro vinculado a agendamentos (opcional)             |
+| Tipo | Objeto | Por que foi escolhido |
+|------|--------|------------------------|
+| **View** | `vw_agenda_completa` | Junta cliente + funcionário + serviços (N:M) de cada agendamento; evita repetir JOINs complexos. |
+| **View** | `vw_total_gasto_cliente` | Consolida gasto em produtos + serviços por cliente (relatório). |
+| **View** | `vw_resumo_vendas_funcionario` | Faturamento gerado por cada funcionário. |
+| **Trigger** | `trg_baixar_estoque` | Dá baixa automática no estoque a cada item vendido e alerta estoque baixo — garante consistência sem depender da aplicação. |
+| **Procedure** | `sp_registrar_venda` | Agrupa validações + criação de venda/itens numa única transação. |
+| **Function** | `fn_total_gasto_cliente` | Cálculo escalar reutilizável (total gasto por cliente). |
+| **Function** | `fn_relatorio_faturamento` | Retorna tabela com faturamento (serviços/produtos) por período. |
+| **Índices** | `idx_*` | Aceleram buscas por nome (ILIKE) e JOINs por chave estrangeira. |
 
----
-
-## ⚡ Triggers PostgreSQL
-
-1. **Baixa de estoque** – ao inserir item na venda, o estoque é reduzido automaticamente
-2. **Restauração de estoque** – ao cancelar uma venda, o estoque é devolvido
-3. **Alerta de estoque baixo** – NOTICE no PostgreSQL quando estoque ≤ estoque_mínimo
+> Correção feita na revisão: a versão anterior tinha **4 triggers** disparando no
+> mesmo INSERT de `item_venda` (estoque era debitado várias vezes). Consolidado em
+> **1 único trigger**.
 
 ---
 
-## 🎨 Paleta de Cores
+## ✅ Regras de integridade implementadas (melhorias)
 
-| Cor              | Hex       |
-|------------------|-----------|
-| Rosa principal   | `#E98688` |
-| Verde suave      | `#CCEDCE` |
-| Rosa claro       | `#FEB3C2` |
-| Bege             | `#F8D3AD` |
-| Azul suave       | `#AABDFF` |
-| Texto            | `#4F4F4F` |
+- Códigos sequenciais (`SERIAL`) e dados reais.
+- **Não grava campos vazios** (nome, marca, forma de pagamento…).
+- **Não aceita preço/quantidade/valor zero ou negativo** nem estoque negativo.
+- **Impede vendas/agendamentos de cliente, produto ou serviço inexistentes.**
+- Estoque insuficiente bloqueia a venda.
+- Listas e pesquisas organizadas, telas estruturadas (títulos, separadores, alinhamento).
+
+As validações ficam no backend (mensagens amigáveis em PT-BR) e, opcionalmente,
+reforçadas por `CHECK`/`FK` no banco (`extras.sql`).
+
+---
+
+## 🎨 Telas (CRUD)
+Início (dashboard), Clientes, Funcionários, Produtos, Serviços, Agendamentos
+(com múltiplos serviços), Vendas (com itens e baixa de estoque) e Pagamentos.
